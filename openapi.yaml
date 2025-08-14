@@ -1,0 +1,597 @@
+openapi: 3.0.3
+info:
+  title: AWS Marketplace SaaS Usage Records API
+  description: |
+    AWS SAMで構築されたAWS Marketplace SaaSサーバーレス統合アプリケーション。
+    DynamoDBとSQSを使用したLambdaベースのアーキテクチャで、AWS Marketplaceに掲載されたSaaS製品の使用量メータリングを処理します。
+    
+    ## 認証方法
+    
+    ### JWTトークン認証（必須）
+    1. `POST /v1/auth/token` でクライアントID + API_KEYを使ってJWTトークンを取得
+    2. 取得したトークンを `Authorization: Bearer {jwt-token}` ヘッダーで送信
+    3. トークン有効期限: 1時間
+    
+    **注意**: 直接API_KEY認証は廃止されました。必ずJWTトークン認証をご利用ください。
+  version: 1.1.0
+  contact:
+    name: Anti-Pattern Inc.
+
+servers:
+  - url: https://{apiId}.execute-api.ap-northeast-1.amazonaws.com/Prod/v1
+    description: Production API Gateway endpoint (v1)
+    variables:
+      apiId:
+        description: API Gateway ID
+        default: example
+
+security:
+  - BearerAuth: []
+
+paths:
+  /v1/auth/token:
+    post:
+      summary: 認証トークン発行
+      description: |
+        クライアントID（customer_id）とAPI_KEYを用いてJWTトークンを発行します。
+        発行されたトークンは1時間有効で、他のAPIエンドポイントのBearerトークンとして使用できます。
+      operationId: issueAuthToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_id
+                - api_key
+              properties:
+                client_id:
+                  type: string
+                  description: クライアントID（DynamoDBのcustomer_id）
+                  example: "test-customer-001"
+                api_key:
+                  type: string
+                  description: API キー（DynamoDBのapi_key）
+                  example: "ak-1234567890abcdef"
+            examples:
+              auth_request:
+                summary: 認証リクエスト例
+                value:
+                  client_id: "test-customer-001"
+                  api_key: "ak-1234567890abcdef"
+      responses:
+        '200':
+          description: 認証成功、JWTトークンが発行されました
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: JWTアクセストークン
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  token_type:
+                    type: string
+                    description: トークンタイプ
+                    example: "Bearer"
+                  expires_in:
+                    type: string
+                    description: トークン有効期限
+                    example: "1h"
+        '401':
+          description: 認証失敗
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_credentials:
+                  summary: 無効なクレデンシャル
+                  value:
+                    error: "Authentication failed"
+                    message: "Invalid client credentials"
+                inactive_client:
+                  summary: 無効なクライアント
+                  value:
+                    error: "Authentication failed"
+                    message: "Client account is inactive"
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    options:
+      summary: プリフライトリクエスト (CORS)
+      description: CORS プリフライトリクエストの処理
+      operationId: authTokenOptions
+      security: []
+      responses:
+        '200':
+          description: CORS プリフライト成功
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                example: "POST,OPTIONS"
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+                example: "Content-Type,Authorization"
+
+  /v1/usage-records:
+    post:
+      summary: 新規使用量レコード作成
+      description: |
+        AWS Marketplace SaaS製品の使用量レコードをDynamoDBに保存します。
+        重複レコードの作成を防止し、並列処理で複数レコードを効率的に処理します。
+      operationId: createUsageRecords
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/UsageRecord'
+            examples:
+              single_record:
+                summary: 単一レコード例
+                value:
+                  - product_id: "test-product"
+                    CustomerIdentifier: "test-customer-001"
+                    dimension:
+                      name: "requests"
+                      quantity: 10
+                    start_time: "2025-08-01T07:00:00Z"
+              multiple_records:
+                summary: 複数レコード例
+                value:
+                  - product_id: "test-product"
+                    CustomerIdentifier: "test-customer-001"
+                    dimension:
+                      name: "requests"
+                      quantity: 10
+                    start_time: "2025-08-01T07:00:00Z"
+                  - product_id: "test-product"
+                    CustomerIdentifier: "test-customer-002"
+                    dimension:
+                      name: "requests"
+                      quantity: 25
+                    start_time: "2025-08-01T08:00:00Z"
+                  - product_id: "test-product"
+                    CustomerIdentifier: "test-customer-003"
+                    dimension:
+                      name: "storage"
+                      quantity: 100
+                    start_time: "2025-08-01T09:00:00Z"
+              with_allocations:
+                summary: 使用量アロケーション付き例
+                value:
+                  - product_id: "test-product"
+                    CustomerIdentifier: "test-customer-001"
+                    dimension:
+                      name: "requests"
+                      quantity: 10
+                      usage_allocations:
+                        - allocated_usage_quantity: 5
+                          tags:
+                            - key: "team"
+                              value: "engineering"
+                        - allocated_usage_quantity: 5
+                          tags:
+                            - key: "team"
+                              value: "sales"
+                    start_time: "2025-08-01T07:00:00Z"
+      responses:
+        '200':
+          description: 全レコードが正常に作成されました
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '207':
+          description: 部分的に成功（一部レコードが失敗）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartialSuccessResponse'
+        '400':
+          description: リクエストの検証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 全レコードが重複
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictResponse'
+        '500':
+          description: 内部サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: 既存使用量レコード更新
+      description: |
+        CustomerIdentifierとTimestampで特定される既存レコードを更新します。
+        metering_failed = falseの場合（AWS Marketplace API連携済み）は更新を拒否します。
+        quantity と usage_allocations のみ更新可能です。
+      operationId: updateUsageRecords
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/UsageRecord'
+            examples:
+              quantity_update:
+                summary: 数量更新例
+                value:
+                  - product_id: "test-product"
+                    CustomerIdentifier: "test-customer-001"
+                    dimension:
+                      name: "requests"
+                      quantity: 15
+                    start_time: "2025-08-01T07:00:00Z"
+              allocations_update:
+                summary: 使用量アロケーション更新例
+                value:
+                  - product_id: "test-product"
+                    CustomerIdentifier: "test-customer-001"
+                    dimension:
+                      name: "requests"
+                      quantity: 15
+                      usage_allocations:
+                        - allocated_usage_quantity: 8
+                          tags:
+                            - key: "team"
+                              value: "engineering"
+                        - allocated_usage_quantity: 7
+                          tags:
+                            - key: "team"
+                              value: "sales"
+                    start_time: "2025-08-01T07:00:00Z"
+      responses:
+        '200':
+          description: 全レコードが正常に更新されました
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateSuccessResponse'
+        '207':
+          description: 部分的に成功（一部レコードが失敗）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartialUpdateResponse'
+        '400':
+          description: リクエストの検証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 全レコードが更新不可（レコード未存在または処理済み）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotUpdatableResponse'
+        '500':
+          description: 内部サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    options:
+      summary: CORS preflight request
+      description: CORS preflight request for usage-records endpoint
+      responses:
+        '200':
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Bearer token authentication using JWT tokens only.
+        
+        **認証手順:**
+        1. `/v1/auth/token` エンドポイントでJWTトークンを取得
+        2. Authorization: Bearer {jwt-token}
+        
+        Format: Authorization: Bearer {jwt-token}
+  schemas:
+    UsageRecord:
+      type: object
+      required:
+        - product_id
+        - CustomerIdentifier
+        - dimension
+        - start_time
+      properties:
+        product_id:
+          type: string
+          pattern: '^[a-zA-Z0-9-_]+$'
+          minLength: 1
+          description: AWS Marketplace製品ID
+          example: "test-product"
+        CustomerIdentifier:
+          type: string
+          pattern: '^[a-zA-Z0-9-_]+$'
+          minLength: 1
+          description: 顧客識別子
+          example: "test-customer-001"
+        dimension:
+          $ref: '#/components/schemas/Dimension'
+        start_time:
+          type: string
+          format: date-time
+          description: 使用量レコードの開始時刻（ISO 8601形式）
+          example: "2025-08-01T07:00:00Z"
+      additionalProperties: false
+
+    Dimension:
+      type: object
+      required:
+        - name
+        - quantity
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          description: ディメンション名
+          example: "requests"
+        quantity:
+          type: number
+          minimum: 1
+          description: 使用量
+          example: 10
+        usage_allocations:
+          type: array
+          description: 使用量アロケーション（オプション）
+          items:
+            $ref: '#/components/schemas/UsageAllocation'
+        dry_run:
+          type: boolean
+          description: ドライラン実行フラグ（オプション）
+          example: false
+      additionalProperties: false
+
+    UsageAllocation:
+      type: object
+      properties:
+        allocated_usage_quantity:
+          type: number
+          minimum: 0
+          description: 割り当て使用量
+          example: 5
+        tags:
+          type: array
+          description: アロケーションに関連するタグ
+          items:
+            $ref: '#/components/schemas/Tag'
+      additionalProperties: false
+
+    Tag:
+      type: object
+      required:
+        - key
+        - value
+      properties:
+        key:
+          type: string
+          minLength: 1
+          description: タグキー
+          example: "team"
+        value:
+          type: string
+          minLength: 1
+          description: タグ値
+          example: "engineering"
+      additionalProperties: false
+
+    RecordResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: レコード処理の成功/失敗
+        customerIdentifier:
+          type: string
+          description: 顧客識別子
+        timestamp:
+          type: number
+          description: レコードのタイムスタンプ
+        recordId:
+          type: string
+          description: レコードID（顧客識別子:タイムスタンプ）
+        requestId:
+          type: string
+          description: リクエストID
+        error:
+          type: string
+          description: エラーメッセージ（失敗時）
+        errorCode:
+          type: string
+          description: エラーコード（失敗時）
+          enum:
+            - DUPLICATE_RECORD
+            - RECORD_NOT_UPDATABLE
+            - SAVE_FAILURE
+            - UPDATE_FAILURE
+        httpStatusCode:
+          type: number
+          description: HTTPステータスコード（失敗時）
+
+    UpdateRecordResult:
+      allOf:
+        - $ref: '#/components/schemas/RecordResult'
+        - type: object
+          properties:
+            updatedFields:
+              type: array
+              items:
+                type: string
+              description: 更新されたフィールド一覧
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "All records saved successfully"
+        totalRecords:
+          type: number
+          example: 2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordResult'
+
+    UpdateSuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "All records updated successfully"
+        totalRecords:
+          type: number
+          example: 2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateRecordResult'
+
+    PartialSuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Partial success"
+        totalRecords:
+          type: number
+          example: 3
+        successfulRecords:
+          type: number
+          example: 2
+        failedRecords:
+          type: number
+          example: 1
+        duplicateRecords:
+          type: number
+          example: 0
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordResult'
+
+    PartialUpdateResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Partial success"
+        totalRecords:
+          type: number
+          example: 3
+        successfulRecords:
+          type: number
+          example: 2
+        failedRecords:
+          type: number
+          example: 1
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateRecordResult'
+
+    ConflictResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "All records already exist"
+        totalRecords:
+          type: number
+          example: 2
+        duplicateRecords:
+          type: number
+          example: 2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordResult'
+
+    NotUpdatableResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Records not found or already processed (metering failed = false)"
+        requestId:
+          type: string
+        totalRecords:
+          type: number
+          example: 2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateRecordResult'
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: エラーメッセージ
+        requestId:
+          type: string
+          description: リクエストID
+      required:
+        - error

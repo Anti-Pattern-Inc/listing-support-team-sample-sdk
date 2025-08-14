@@ -16,7 +16,7 @@
   - `auth_test.go`: 認証機能のテスト
 - `wrapper_test.go`: ラッパー機能のテスト
 - `example_test.go`: 使用例とサンプルコード
-- `go.mod`: モジュール定義（`github.com/nishimurashinya/openapi-go-sdk`）
+- `go.mod`: モジュール定義（`github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk`）
 - `api.yaml`: OpenAPI 3.0.3仕様書
 
 ## 開発コマンド
@@ -80,7 +80,7 @@ go build ./...
 
 #### 1. Node.js風シンプルAPI（推奨）
 ```go
-import "github.com/nishimurashinya/openapi-go-sdk"
+import "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk"
 
 // SDK作成
 client, err := sdk.NewSDKWithBearer(
@@ -132,8 +132,8 @@ record := sdk.NewMeteringRecordBuilder().
 #### 3. Bearer認証（従来方式）
 ```go
 import (
-    "github.com/nishimurashinya/openapi-go-sdk"
-    "github.com/nishimurashinya/openapi-go-sdk/middleware"
+    "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk"
+    "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/middleware"
 )
 
 // 簡単な方法

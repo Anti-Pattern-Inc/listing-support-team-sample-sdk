@@ -13,7 +13,7 @@ AWS Marketplace SaaSサービス向けの使用量レコードAPI用Go SDKです
 ## インストール
 
 ```bash
-go get github.com/nishimurashinya/openapi-go-sdk
+go get github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk
 ```
 
 ## クイックスタート
@@ -28,7 +28,7 @@ import (
     "log"
     "time"
     
-    "github.com/nishimurashinya/openapi-go-sdk/modules/usage"
+    "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/modules/usage"
 )
 
 func main() {
