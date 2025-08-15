@@ -1,14 +1,14 @@
 # AWS Marketplace SaaS Usage Records SDK for Go
 
-AWS Marketplace SaaSサービス向けの使用量レコードAPI用Go SDKです。Node.js SDKと同様の使いやすいインターフェースを提供します。
+AWS Marketplace SaaSサービス向けの使用量レコードAPI用Go SDKです。OpenAPIから自動生成されたクライアントとユーザーフレンドリーなラッパーを提供します。
 
 ## 特徴
 
-- 🚀 **Node.js風のシンプルAPI**: `client.V1().CreateMeteringUsageRecords()`
-- 🔐 **複数の認証方式**: Bearer、HMAC-SHA256署名、カスタム認証
-- 🛠️ **便利なヘルパー関数**: メソッドチェーン、ビルダーパターン対応
-- 📦 **型安全**: GoのStructによる型安全性
-- 🔧 **環境変数サポート**: `AWS_MARKETPLACE_API_KEY`, `AWS_MARKETPLACE_SECRET_KEY`
+- 🚀 **型安全**: OpenAPIから自動生成されたGoクライアント
+- 🔐 **認証対応**: ClientID + APIKey による認証
+- 🛠️ **シンプルなAPI**: SaaSusスタイルのクライアントインターフェース
+- 📦 **エラーハンドリング**: 詳細なエラーレスポンス対応
+- 🎯 **使いやすい**: 認証ボイラープレートを排除した設計
 
 ## インストール
 
@@ -18,162 +18,275 @@ go get github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk
 
 ## クイックスタート
 
-### 基本的な使用方法
+### SaaSusスタイルAPI（推奨）
 
 ```go
 package main
 
 import (
     "context"
+    "fmt"
     "log"
     "time"
-    
-    "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/modules/usage"
+
+    "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/generated/clientapi"
+    marketplace "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/modules/clientapi"
 )
 
 func main() {
-    // Usage APIクライアント作成（Base URLを直接指定）
-    client, err := usage.NewClient(
-        "https://api-id.execute-api.ap-northeast-1.amazonaws.com/Prod",
-        "your-api-key",
-    )
-    if err != nil {
-        log.Fatal(err)
-    }
+    ctx := context.Background()
 
-    // 使用量レコード作成（Node.js風）
-    records := []usage.MeteringRecord{
+    fmt.Println("🚀 SaaSus-style API client example")
+
+    // Example 1: Simple authentication + marketplace operations (like SaaSus SDK)
+    fmt.Println("\n📝 Example 1: SaaSus-style usage")
+    
+    clientID := "your_client_id"
+    apiKey := "your_api_key"
+
+    // Step 1: Create marketplace client (handles auth internally)
+    marketplaceClient, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
+    if err != nil {
+        log.Fatal("❌ Failed to create marketplace client:", err)
+    }
+    fmt.Println("✅ Marketplace client created")
+
+    // Step 2: Create usage records (simple method call)
+    records := []clientapi.UsageRecord{
         {
-            Cloud:      "aws",
-            ProductID:  "1test1a2b3c4d5e6f7g8h9ijk",
-            CustomerID: "ij3sXMkN3or",
-            Dimension:  usage.MeteringDimension{Name: "api-requests", Quantity: 100},
-            StartTime:  time.Now().Format(time.RFC3339),
+            ProductId:          "my-product",
+            CustomerIdentifier: "customer-123",
+            Dimension: clientapi.Dimension{
+                Name:     "api-calls",
+                Quantity: 100,
+            },
+            StartTime: time.Now(),
         },
     }
 
-    ctx := context.Background()
-    response, err := client.V1().CreateMeteringUsageRecords(ctx, records)
+    response, err := marketplaceClient.Client.CreateUsageRecordsWithResponse(ctx, records)
     if err != nil {
-        log.Fatal(err)
+        log.Printf("❌ Failed to create records: %v", err)
+    } else {
+        handleResponse("Create", response)
     }
 
-    log.Printf("Status: %d", response.StatusCode())
+    // Example 2: Separate auth and marketplace clients (more control)
+    fmt.Println("\n📝 Example 2: Separate auth client")
+    
+    // Create auth client
+    authClient, err := marketplace.NewAuthClient()
+    if err != nil {
+        log.Fatal("❌ Failed to create auth client:", err)
+    }
+
+    // Get token
+    token, err := authClient.GetAuthToken(ctx, clientID, apiKey)
+    if err != nil {
+        log.Printf("❌ Authentication failed: %v", err)
+        return
+    }
+    fmt.Println("✅ Token obtained")
+
+    // Create marketplace client with token
+    marketplaceClient2, err := marketplace.NewMarketplaceClient(token)
+    if err != nil {
+        log.Fatal("❌ Failed to create marketplace client:", err)
+    }
+
+    // Update usage records
+    updateRecords := []clientapi.UsageRecord{
+        {
+            ProductId:          "my-product",
+            CustomerIdentifier: "customer-456",
+            Dimension: clientapi.Dimension{
+                Name:     "storage-gb",
+                Quantity: 50.5,
+            },
+            StartTime: time.Now(),
+        },
+    }
+
+    updateResponse, err := marketplaceClient2.Client.UpdateUsageRecordsWithResponse(ctx, updateRecords)
+    if err != nil {
+        log.Printf("❌ Failed to update records: %v", err)
+    } else {
+        handleUpdateResponse("Update", updateResponse)
+    }
+
+    fmt.Println("\n🎉 SaaSus-style examples completed!")
+}
+
+func handleResponse(operation string, response *clientapi.CreateUsageRecordsResponse) {
+    switch response.StatusCode() {
+    case 200:
+        fmt.Printf("✅ %s: Success\n", operation)
+        if response.JSON200 != nil && response.JSON200.TotalRecords != nil {
+            fmt.Printf("   Total records: %.0f\n", *response.JSON200.TotalRecords)
+        }
+    case 207:
+        fmt.Printf("⚠️ %s: Partial success\n", operation)
+        if response.JSON207 != nil {
+            if response.JSON207.SuccessfulRecords != nil && response.JSON207.FailedRecords != nil {
+                fmt.Printf("   Success: %.0f, Failed: %.0f\n", 
+                    *response.JSON207.SuccessfulRecords, *response.JSON207.FailedRecords)
+            }
+        }
+    case 401:
+        fmt.Printf("❌ %s: Authentication error: %s\n", operation, response.JSON401.Error)
+    case 400:
+        fmt.Printf("❌ %s: Bad request: %s\n", operation, response.JSON400.Error)
+    case 500:
+        fmt.Printf("❌ %s: Server error: %s\n", operation, response.JSON500.Error)
+    default:
+        fmt.Printf("❌ %s: Unexpected status: %d\n", operation, response.StatusCode())
+    }
+}
+
+func handleUpdateResponse(operation string, response *clientapi.UpdateUsageRecordsResponse) {
+    switch response.StatusCode() {
+    case 200:
+        fmt.Printf("✅ %s: Success\n", operation)
+        if response.JSON200 != nil && response.JSON200.TotalRecords != nil {
+            fmt.Printf("   Total records: %.0f\n", *response.JSON200.TotalRecords)
+        }
+    case 207:
+        fmt.Printf("⚠️ %s: Partial success\n", operation)
+        if response.JSON207 != nil {
+            if response.JSON207.SuccessfulRecords != nil && response.JSON207.FailedRecords != nil {
+                fmt.Printf("   Success: %.0f, Failed: %.0f\n", 
+                    *response.JSON207.SuccessfulRecords, *response.JSON207.FailedRecords)
+            }
+        }
+    case 401:
+        fmt.Printf("❌ %s: Authentication error: %s\n", operation, response.JSON401.Error)
+    case 400:
+        fmt.Printf("❌ %s: Bad request: %s\n", operation, response.JSON400.Error)
+    case 409:
+        fmt.Printf("⚠️ %s: Conflict - records not updatable: %s\n", operation, response.JSON409.Error)
+    case 500:
+        fmt.Printf("❌ %s: Server error: %s\n", operation, response.JSON500.Error)
+    default:
+        fmt.Printf("❌ %s: Unexpected status: %d\n", operation, response.StatusCode())
+    }
 }
 ```
 
-## 認証方式
-
-### 1. Bearer認証（推奨）
+### シンプルなワンライナー
 
 ```go
-client, err := usage.NewClient(
-    "https://api-id.execute-api.ap-northeast-1.amazonaws.com/Prod", 
-    "your-api-key",
+// 最もシンプルな使用方法
+client, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
+response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
+```
+
+## API構造
+
+### modules/clientapi（高レベルAPI）- 推奨
+
+SaaSusスタイルのシンプルなクライアントインターフェース：
+
+```go
+import marketplace "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/modules/clientapi"
+
+// 認証込みワンライナー
+client, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
+
+// または段階的
+authClient, err := marketplace.NewAuthClient()
+token, err := authClient.GetAuthToken(ctx, clientID, apiKey)
+marketplaceClient, err := marketplace.NewMarketplaceClient(token)
+```
+
+### generated/clientapi（低レベルAPI）
+
+OpenAPIから自動生成されたクライアントを直接使用：
+
+```go
+import "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/generated/clientapi"
+
+// 基本クライアント
+client, err := clientapi.NewClientWithResponses(baseURL)
+
+// 認証付きクライアント
+client, err := clientapi.NewClientWithResponses(
+    baseURL,
+    clientapi.WithRequestEditorFn(authFunc),
 )
 ```
 
-### 2. HMAC-SHA256署名認証（高セキュリティ）
+## 利用可能なAPI
+
+### 認証
+- `GetAuthToken(ctx, clientID, apiKey)`: 認証トークン取得
+
+### 使用量記録
+- `Client.CreateUsageRecordsWithResponse(ctx, records)`: 使用量記録作成
+- `Client.UpdateUsageRecordsWithResponse(ctx, records)`: 使用量記録更新
+- その他すべてのAPIメソッドが`Client`経由で利用可能
+
+### 低レベルAPI
+- `IssueAuthTokenWithResponse()`: 認証トークン取得
+- `CreateUsageRecordsWithResponse()`: 使用量記録作成
+- `UpdateUsageRecordsWithResponse()`: 使用量記録更新
+- `OptionsUsageRecordsWithResponse()`: CORS対応
+
+## 使用量レコードの作成
+
+### 基本的な使用量レコード
 
 ```go
-client, err := usage.NewClientWithSignature(
-    "https://api-id.execute-api.ap-northeast-1.amazonaws.com/Prod",
-    "api-key", 
-    "secret-key",
-)
-```
-
-### 3. カスタム認証
-
-```go
-customAuth := func(ctx context.Context, req *http.Request) error {
-    req.Header.Set("X-Custom-Token", "your-token")
-    return nil
+records := []clientapi.UsageRecord{
+    {
+        ProductId:          "product-123",
+        CustomerIdentifier: "customer-456",
+        Dimension: clientapi.Dimension{
+            Name:     "api-requests",
+            Quantity: 100,
+        },
+        StartTime: time.Now(),
+    },
 }
 
-client, err := usage.NewClientWithCustomAuth(
-    "https://api-id.execute-api.ap-northeast-1.amazonaws.com/Prod",
-    customAuth,
-)
+response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
 ```
 
-## 使用量レコードの作成方法
-
-### 基本的な作成
+### 使用量アロケーション付き
 
 ```go
-record := usage.NewMeteringRecord(
-    "product-id", 
-    "customer-id", 
-    "api-requests", 
-    100, 
-    time.Now(),
-)
-```
-
-### クラウドプラットフォーム指定
-
-```go
-record := usage.NewMeteringRecordWithCloud(
-    "aws", 
-    "product-id", 
-    "customer-id", 
-    "compute-hours", 
-    50, 
-    time.Now(),
-)
-```
-
-### メソッドチェーン
-
-```go
-record := usage.NewMeteringRecord("product-id", "customer-id", "requests", 100, time.Now()).
-    WithCloud("aws").
-    WithScheduledAt(time.Now().Add(1 * time.Hour))
-```
-
-### ビルダーパターン
-
-```go
-record := usage.NewMeteringRecordBuilder().
-    ProductID("product-id").
-    CustomerID("customer-id").
-    Dimension("api-requests", 100).
-    StartTime(time.Now()).
-    Cloud("aws").
-    Build()
-```
-
-## API層の構造
-
-このSDKは3つのレベルのAPIを提供します：
-
-1. **高レベルAPI（推奨）**: `client.V1().CreateMeteringUsageRecords()`
-2. **中レベルAPI**: `client.CreateUsageRecords()`
-3. **低レベルAPI**: 生成されたクライアント直接アクセス
-
-## 複数レコードの一括送信
-
-```go
-records := []usage.MeteringRecord{
-    usage.NewMeteringRecordWithCloud("aws", "prod-1", "cust-1", "api-calls", 100, time.Now()),
-    usage.NewMeteringRecordWithCloud("aws", "prod-1", "cust-2", "api-calls", 150, time.Now()),
-    usage.NewMeteringRecordBuilder().
-        ProductID("prod-2").
-        CustomerID("cust-1").
-        Dimension("compute-hours", 5).
-        StartTime(time.Now()).
-        Cloud("aws").
-        Build(),
+records := []clientapi.UsageRecord{
+    {
+        ProductId:          "product-storage",
+        CustomerIdentifier: "customer-789",
+        Dimension: clientapi.Dimension{
+            Name:     "storage-gb",
+            Quantity: 50,
+            UsageAllocations: &[]clientapi.UsageAllocation{
+                {
+                    AllocatedUsageQuantity: floatPtr(25),
+                    Tags: &[]clientapi.Tag{
+                        {Key: "region", Value: "us-east-1"},
+                        {Key: "tier", Value: "premium"},
+                    },
+                },
+                {
+                    AllocatedUsageQuantity: floatPtr(25),
+                    Tags: &[]clientapi.Tag{
+                        {Key: "region", Value: "us-west-2"},
+                        {Key: "tier", Value: "standard"},
+                    },
+                },
+            },
+        },
+        StartTime: time.Now(),
+    },
 }
-
-response, err := client.V1().CreateMeteringUsageRecords(ctx, records)
 ```
 
 ## エラーハンドリング
 
 ```go
-response, err := client.V1().CreateMeteringUsageRecords(ctx, records)
+response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
 if err != nil {
     log.Printf("API Error: %v", err)
     return
@@ -181,19 +294,56 @@ if err != nil {
 
 switch response.StatusCode() {
 case 200:
-    if response.JSON200 != nil && response.JSON200.Message != nil {
-        log.Printf("Success: %s", *response.JSON200.Message)
+    fmt.Printf("✅ Success\n")
+    if response.JSON200 != nil && response.JSON200.TotalRecords != nil {
+        fmt.Printf("   Total records: %.0f\n", *response.JSON200.TotalRecords)
     }
+case 207:
+    fmt.Printf("⚠️ Partial Success\n")
+    if response.JSON207 != nil {
+        if response.JSON207.SuccessfulRecords != nil && response.JSON207.FailedRecords != nil {
+            fmt.Printf("   Success: %.0f, Failed: %.0f\n", 
+                *response.JSON207.SuccessfulRecords, *response.JSON207.FailedRecords)
+        }
+    }
+case 400:
+    fmt.Printf("❌ Bad Request: %s\n", response.JSON400.Error)
+case 401:
+    fmt.Printf("❌ Unauthorized: %s\n", response.JSON401.Error)
 case 409:
-    if response.JSON409 != nil && response.JSON409.Error != nil {
-        log.Printf("Conflict: %s", *response.JSON409.Error)
-    }
+    fmt.Printf("❌ Conflict: %s\n", response.JSON409.Error)
+case 500:
+    fmt.Printf("❌ Server Error: %s\n", response.JSON500.Error)
 default:
-    log.Printf("Unexpected status: %d", response.StatusCode())
+    fmt.Printf("❌ Unexpected status: %d\n", response.StatusCode())
 }
 ```
 
+## ファイル構造
+
+```
+├── README.md                    # このファイル
+├── CLAUDE.md                    # 開発者向けガイド
+├── go.mod                       # Goモジュール定義
+├── openapi.yaml                 # OpenAPI仕様書
+├── generate.sh                  # クライアント生成スクリプト
+├── generated/
+│   └── clientapi/
+│       ├── client.gen.go       # 生成されたクライアント
+│       └── types.gen.go        # 生成された型定義
+└── modules/
+    └── clientapi/
+        ├── auth.go             # 認証クライアント
+        └── client.go           # マーケットプレイスクライアント
+```
+
 ## 開発
+
+### クライアント再生成
+
+```bash
+./generate.sh
+```
 
 ### テスト実行
 
@@ -207,6 +357,10 @@ go test -v ./...
 go build ./...
 ```
 
+## サンプルコード
+
+完全なサンプルコードはREADME冒頭の「クイックスタート」セクションを参照してください。
+
 ## ライセンス
 
 [ライセンス情報をここに記載]
@@ -217,5 +371,5 @@ go build ./...
 
 ## サポート
 
-- [API仕様](./api.yaml)
-- [開発者ガイド](./CLAUDE.md)
+- [OpenAPI仕様](./openapi.yaml)
+- [開発者向けドキュメント](./CLAUDE.md)
