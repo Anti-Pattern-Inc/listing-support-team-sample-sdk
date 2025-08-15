@@ -14,9 +14,13 @@
 - `generated/clientapi/`: 自動生成されたAPIクライアント
   - `client.gen.go`: HTTPクライアントの実装
   - `types.gen.go`: API型定義
+- `middleware/`: HTTPミドルウェア
+  - `authenticate.go`: 認証ミドルウェア
+  - `example.go`: ミドルウェア使用例
 - `modules/clientapi/`: 手動作成の高レベルラッパー
   - `auth.go`: 認証クライアント
   - `client.go`: マーケットプレイスクライアント
+  - `env.go`: 環境変数認証
 
 ## 開発コマンド
 
@@ -79,10 +83,10 @@ _, response, err := marketplaceClient.CreateUsageRecords(ctx, records)
   - `NewAuthClient()`: 認証クライアント作成
   - `GetAuthToken(ctx, clientID, apiKey)`: トークン取得
 - `MarketplaceClient`: マーケットプレイス操作クライアント
+  - `NewMarketplaceClientFromEnv(ctx)`: 環境変数から認証（推奨）
   - `NewMarketplaceClient(token)`: トークンからクライアント作成
   - `NewMarketplaceClientWithAuth(ctx, clientID, apiKey)`: 認証込み作成
-  - `CreateUsageRecords(ctx, records)`: 使用量記録作成
-  - `UpdateUsageRecords(ctx, records)`: 使用量記録更新
+  - `Client`: 全APIメソッドへの直接アクセス
 
 #### generated/clientapi パッケージ
 - `Client`: 低レベルHTTPクライアント
@@ -109,15 +113,19 @@ _, response, err := marketplaceClient.CreateUsageRecords(ctx, records)
 ### 推奨パターン（SaaSusスタイル）
 
 ```go
-// パターン1: ワンライナー初期化
-client, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
-_, response, err := client.CreateUsageRecords(ctx, records)
+// パターン1: 環境変数認証（最推奨）
+client, err := marketplace.NewMarketplaceClientFromEnv(ctx)
+response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
 
-// パターン2: 段階的初期化（トークン管理が必要な場合）
+// パターン2: 直接認証
+client, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
+response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
+
+// パターン3: 段階的認証（高度な制御）
 authClient, err := marketplace.NewAuthClient()
 token, err := authClient.GetAuthToken(ctx, clientID, apiKey)
 marketplaceClient, err := marketplace.NewMarketplaceClient(token)
-_, response, err := marketplaceClient.CreateUsageRecords(ctx, records)
+response, err := marketplaceClient.Client.CreateUsageRecordsWithResponse(ctx, records)
 ```
 
 ### 低レベルパターン（直接generated使用）

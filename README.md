@@ -1,12 +1,12 @@
 # AWS Marketplace SaaS Usage Records SDK for Go
 
-AWS Marketplace SaaSサービス向けの使用量レコードAPI用Go SDKです。OpenAPIから自動生成されたクライアントとユーザーフレンドリーなラッパーを提供します。
+AWS Marketplace SaaSサービス向けの使用量レコードAPI用Go SDKです。OpenAPIから自動生成されたクライアントとシンプルなラッパーを提供します。
 
 ## 特徴
 
 - 🚀 **型安全**: OpenAPIから自動生成されたGoクライアント
-- 🔐 **認証対応**: ClientID + APIKey による認証
-- 🛠️ **シンプルなAPI**: SaaSusスタイルのクライアントインターフェース
+- 🔐 **認証対応**: 環境変数から自動認証
+- 🛠️ **シンプルなAPI**: SaaSus SDKスタイルの設計
 - 📦 **エラーハンドリング**: 詳細なエラーレスポンス対応
 - 🎯 **使いやすい**: 認証ボイラープレートを排除した設計
 
@@ -18,7 +18,14 @@ go get github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk
 
 ## クイックスタート
 
-### SaaSusスタイルAPI（推奨）
+### 環境変数設定
+
+```bash
+export MARKETPLACE_CLIENT_ID="your_client_id"
+export MARKETPLACE_API_KEY="your_api_key"
+```
+
+### 基本的な使用方法
 
 ```go
 package main
@@ -36,25 +43,16 @@ import (
 func main() {
     ctx := context.Background()
 
-    fmt.Println("🚀 SaaSus-style API client example")
-
-    // Example 1: Simple authentication + marketplace operations (like SaaSus SDK)
-    fmt.Println("\n📝 Example 1: SaaSus-style usage")
-    
-    clientID := "your_client_id"
-    apiKey := "your_api_key"
-
-    // Step 1: Create marketplace client (handles auth internally)
-    marketplaceClient, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
+    // 1. 環境変数から自動認証クライアント作成
+    client, err := marketplace.ClientWithResponse(ctx)
     if err != nil {
-        log.Fatal("❌ Failed to create marketplace client:", err)
+        log.Fatal("Failed to create client:", err)
     }
-    fmt.Println("✅ Marketplace client created")
 
-    // Step 2: Create usage records (simple method call)
+    // 2. 使用量レコードの作成
     records := []clientapi.UsageRecord{
         {
-            ProductId:          "my-product",
+            ProductId:          "my-product-id",
             CustomerIdentifier: "customer-123",
             Dimension: clientapi.Dimension{
                 Name:     "api-calls",
@@ -64,258 +62,126 @@ func main() {
         },
     }
 
-    response, err := marketplaceClient.Client.CreateUsageRecordsWithResponse(ctx, records)
+    // 3. APIコール
+    response, err := client.CreateUsageRecordsWithResponse(ctx, records)
     if err != nil {
-        log.Printf("❌ Failed to create records: %v", err)
-    } else {
-        handleResponse("Create", response)
+        log.Fatal("API call failed:", err)
     }
 
-    // Example 2: Separate auth and marketplace clients (more control)
-    fmt.Println("\n📝 Example 2: Separate auth client")
-    
-    // Create auth client
-    authClient, err := marketplace.NewAuthClient()
-    if err != nil {
-        log.Fatal("❌ Failed to create auth client:", err)
-    }
-
-    // Get token
-    token, err := authClient.GetAuthToken(ctx, clientID, apiKey)
-    if err != nil {
-        log.Printf("❌ Authentication failed: %v", err)
-        return
-    }
-    fmt.Println("✅ Token obtained")
-
-    // Create marketplace client with token
-    marketplaceClient2, err := marketplace.NewMarketplaceClient(token)
-    if err != nil {
-        log.Fatal("❌ Failed to create marketplace client:", err)
-    }
-
-    // Update usage records
-    updateRecords := []clientapi.UsageRecord{
-        {
-            ProductId:          "my-product",
-            CustomerIdentifier: "customer-456",
-            Dimension: clientapi.Dimension{
-                Name:     "storage-gb",
-                Quantity: 50.5,
-            },
-            StartTime: time.Now(),
-        },
-    }
-
-    updateResponse, err := marketplaceClient2.Client.UpdateUsageRecordsWithResponse(ctx, updateRecords)
-    if err != nil {
-        log.Printf("❌ Failed to update records: %v", err)
-    } else {
-        handleUpdateResponse("Update", updateResponse)
-    }
-
-    fmt.Println("\n🎉 SaaSus-style examples completed!")
-}
-
-func handleResponse(operation string, response *clientapi.CreateUsageRecordsResponse) {
+    // 4. レスポンス処理
     switch response.StatusCode() {
     case 200:
-        fmt.Printf("✅ %s: Success\n", operation)
+        fmt.Println("✅ Success")
         if response.JSON200 != nil && response.JSON200.TotalRecords != nil {
-            fmt.Printf("   Total records: %.0f\n", *response.JSON200.TotalRecords)
+            fmt.Printf("Total records: %.0f\n", *response.JSON200.TotalRecords)
         }
     case 207:
-        fmt.Printf("⚠️ %s: Partial success\n", operation)
-        if response.JSON207 != nil {
-            if response.JSON207.SuccessfulRecords != nil && response.JSON207.FailedRecords != nil {
-                fmt.Printf("   Success: %.0f, Failed: %.0f\n", 
-                    *response.JSON207.SuccessfulRecords, *response.JSON207.FailedRecords)
-            }
-        }
+        fmt.Println("⚠️ Partial success")
     case 401:
-        fmt.Printf("❌ %s: Authentication error: %s\n", operation, response.JSON401.Error)
+        fmt.Printf("❌ Authentication error: %s\n", response.JSON401.Error)
     case 400:
-        fmt.Printf("❌ %s: Bad request: %s\n", operation, response.JSON400.Error)
+        fmt.Printf("❌ Bad request: %s\n", response.JSON400.Error)
     case 500:
-        fmt.Printf("❌ %s: Server error: %s\n", operation, response.JSON500.Error)
+        fmt.Printf("❌ Server error: %s\n", response.JSON500.Error)
     default:
-        fmt.Printf("❌ %s: Unexpected status: %d\n", operation, response.StatusCode())
-    }
-}
-
-func handleUpdateResponse(operation string, response *clientapi.UpdateUsageRecordsResponse) {
-    switch response.StatusCode() {
-    case 200:
-        fmt.Printf("✅ %s: Success\n", operation)
-        if response.JSON200 != nil && response.JSON200.TotalRecords != nil {
-            fmt.Printf("   Total records: %.0f\n", *response.JSON200.TotalRecords)
-        }
-    case 207:
-        fmt.Printf("⚠️ %s: Partial success\n", operation)
-        if response.JSON207 != nil {
-            if response.JSON207.SuccessfulRecords != nil && response.JSON207.FailedRecords != nil {
-                fmt.Printf("   Success: %.0f, Failed: %.0f\n", 
-                    *response.JSON207.SuccessfulRecords, *response.JSON207.FailedRecords)
-            }
-        }
-    case 401:
-        fmt.Printf("❌ %s: Authentication error: %s\n", operation, response.JSON401.Error)
-    case 400:
-        fmt.Printf("❌ %s: Bad request: %s\n", operation, response.JSON400.Error)
-    case 409:
-        fmt.Printf("⚠️ %s: Conflict - records not updatable: %s\n", operation, response.JSON409.Error)
-    case 500:
-        fmt.Printf("❌ %s: Server error: %s\n", operation, response.JSON500.Error)
-    default:
-        fmt.Printf("❌ %s: Unexpected status: %d\n", operation, response.StatusCode())
+        fmt.Printf("❌ Unexpected status: %d\n", response.StatusCode())
     }
 }
 ```
 
-### シンプルなワンライナー
+## API使用方法
+
+### クライアント作成
 
 ```go
-// 最もシンプルな使用方法
-client, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
-response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
+// 環境変数 MARKETPLACE_CLIENT_ID と MARKETPLACE_API_KEY から自動認証
+client, err := marketplace.ClientWithResponse(ctx)
 ```
 
-## API構造
+### 利用可能なAPI
 
-### modules/clientapi（高レベルAPI）- 推奨
+SaaSus SDKスタイルでクライアント取得後、直接APIを呼び出せます：
 
-SaaSusスタイルのシンプルなクライアントインターフェース：
+- `client.CreateUsageRecordsWithResponse(ctx, records)`: 使用量記録作成
+- `client.UpdateUsageRecordsWithResponse(ctx, records)`: 使用量記録更新
+- `client.OptionsUsageRecordsWithResponse(ctx)`: CORS対応
+- `client.IssueAuthTokenWithResponse(ctx, request)`: 認証トークン取得
 
-```go
-import marketplace "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/modules/clientapi"
+## 使用量レコードの構造
 
-// 認証込みワンライナー
-client, err := marketplace.NewMarketplaceClientWithAuth(ctx, clientID, apiKey)
-
-// または段階的
-authClient, err := marketplace.NewAuthClient()
-token, err := authClient.GetAuthToken(ctx, clientID, apiKey)
-marketplaceClient, err := marketplace.NewMarketplaceClient(token)
-```
-
-### generated/clientapi（低レベルAPI）
-
-OpenAPIから自動生成されたクライアントを直接使用：
+### 基本的なレコード
 
 ```go
-import "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/generated/clientapi"
-
-// 基本クライアント
-client, err := clientapi.NewClientWithResponses(baseURL)
-
-// 認証付きクライアント
-client, err := clientapi.NewClientWithResponses(
-    baseURL,
-    clientapi.WithRequestEditorFn(authFunc),
-)
-```
-
-## 利用可能なAPI
-
-### 認証
-- `GetAuthToken(ctx, clientID, apiKey)`: 認証トークン取得
-
-### 使用量記録
-- `Client.CreateUsageRecordsWithResponse(ctx, records)`: 使用量記録作成
-- `Client.UpdateUsageRecordsWithResponse(ctx, records)`: 使用量記録更新
-- その他すべてのAPIメソッドが`Client`経由で利用可能
-
-### 低レベルAPI
-- `IssueAuthTokenWithResponse()`: 認証トークン取得
-- `CreateUsageRecordsWithResponse()`: 使用量記録作成
-- `UpdateUsageRecordsWithResponse()`: 使用量記録更新
-- `OptionsUsageRecordsWithResponse()`: CORS対応
-
-## 使用量レコードの作成
-
-### 基本的な使用量レコード
-
-```go
-records := []clientapi.UsageRecord{
-    {
-        ProductId:          "product-123",
-        CustomerIdentifier: "customer-456",
-        Dimension: clientapi.Dimension{
-            Name:     "api-requests",
-            Quantity: 100,
-        },
-        StartTime: time.Now(),
+record := clientapi.UsageRecord{
+    ProductId:          "product-123",           // 製品ID
+    CustomerIdentifier: "customer-456",         // 顧客識別子
+    Dimension: clientapi.Dimension{
+        Name:     "api-requests",               // メトリクス名
+        Quantity: 100,                         // 使用量
     },
+    StartTime: time.Now(),                     // 開始時刻
 }
-
-response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
 ```
 
 ### 使用量アロケーション付き
 
 ```go
-records := []clientapi.UsageRecord{
-    {
-        ProductId:          "product-storage",
-        CustomerIdentifier: "customer-789",
-        Dimension: clientapi.Dimension{
-            Name:     "storage-gb",
-            Quantity: 50,
-            UsageAllocations: &[]clientapi.UsageAllocation{
-                {
-                    AllocatedUsageQuantity: floatPtr(25),
-                    Tags: &[]clientapi.Tag{
-                        {Key: "region", Value: "us-east-1"},
-                        {Key: "tier", Value: "premium"},
-                    },
-                },
-                {
-                    AllocatedUsageQuantity: floatPtr(25),
-                    Tags: &[]clientapi.Tag{
-                        {Key: "region", Value: "us-west-2"},
-                        {Key: "tier", Value: "standard"},
-                    },
+record := clientapi.UsageRecord{
+    ProductId:          "product-storage",
+    CustomerIdentifier: "customer-789",
+    Dimension: clientapi.Dimension{
+        Name:     "storage-gb",
+        Quantity: 50,
+        UsageAllocations: &[]clientapi.UsageAllocation{
+            {
+                AllocatedUsageQuantity: floatPtr(25),
+                Tags: &[]clientapi.Tag{
+                    {Key: "region", Value: "us-east-1"},
+                    {Key: "tier", Value: "premium"},
                 },
             },
         },
-        StartTime: time.Now(),
     },
+    StartTime: time.Now(),
 }
+
+func floatPtr(f float64) *float64 { return &f }
 ```
 
 ## エラーハンドリング
 
 ```go
-response, err := client.Client.CreateUsageRecordsWithResponse(ctx, records)
+response, err := client.CreateUsageRecordsWithResponse(ctx, records)
 if err != nil {
-    log.Printf("API Error: %v", err)
+    // ネットワークエラーやJSON解析エラー
+    log.Printf("Request error: %v", err)
     return
 }
 
+// HTTPステータスコードによる処理
 switch response.StatusCode() {
 case 200:
-    fmt.Printf("✅ Success\n")
-    if response.JSON200 != nil && response.JSON200.TotalRecords != nil {
-        fmt.Printf("   Total records: %.0f\n", *response.JSON200.TotalRecords)
-    }
+    // 全レコード成功
+    fmt.Println("All records processed successfully")
 case 207:
-    fmt.Printf("⚠️ Partial Success\n")
+    // 部分的成功
     if response.JSON207 != nil {
-        if response.JSON207.SuccessfulRecords != nil && response.JSON207.FailedRecords != nil {
-            fmt.Printf("   Success: %.0f, Failed: %.0f\n", 
-                *response.JSON207.SuccessfulRecords, *response.JSON207.FailedRecords)
-        }
+        fmt.Printf("Success: %.0f, Failed: %.0f\n", 
+            *response.JSON207.SuccessfulRecords, 
+            *response.JSON207.FailedRecords)
     }
 case 400:
-    fmt.Printf("❌ Bad Request: %s\n", response.JSON400.Error)
+    // リクエストエラー
+    fmt.Printf("Bad request: %s\n", response.JSON400.Error)
 case 401:
-    fmt.Printf("❌ Unauthorized: %s\n", response.JSON401.Error)
+    // 認証エラー
+    fmt.Printf("Authentication failed: %s\n", response.JSON401.Error)
 case 409:
-    fmt.Printf("❌ Conflict: %s\n", response.JSON409.Error)
+    // 更新時の競合エラー
+    fmt.Printf("Conflict: %s\n", response.JSON409.Error)
 case 500:
-    fmt.Printf("❌ Server Error: %s\n", response.JSON500.Error)
-default:
-    fmt.Printf("❌ Unexpected status: %d\n", response.StatusCode())
+    // サーバーエラー
+    fmt.Printf("Server error: %s\n", response.JSON500.Error)
 }
 ```
 
@@ -331,10 +197,172 @@ default:
 │   └── clientapi/
 │       ├── client.gen.go       # 生成されたクライアント
 │       └── types.gen.go        # 生成された型定義
+├── middleware/
+│   └── authenticate.go         # 認証ミドルウェア
 └── modules/
     └── clientapi/
-        ├── auth.go             # 認証クライアント
-        └── client.go           # マーケットプレイスクライアント
+        └── client.go           # SaaSusスタイルクライアント
+```
+
+## SDK構造
+
+### modules/clientapi（推奨）
+
+SaaSus SDKスタイルの使いやすいクライアント：
+
+```go
+import marketplace "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/modules/clientapi"
+
+// 唯一のAPIエントリーポイント
+func ClientWithResponse(ctx context.Context) (*clientapi.ClientWithResponses, error)
+```
+
+### generated/clientapi（低レベルAPI）
+
+OpenAPIから自動生成されたクライアント：
+
+```go
+import "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/generated/clientapi"
+
+// 直接使用する場合
+client, err := clientapi.NewClientWithResponses(baseURL)
+```
+
+### middleware
+
+認証処理：
+
+```go
+import "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/middleware"
+
+// 認証トークン取得（内部で使用）
+token, err := middleware.Authenticate(ctx, clientID, apiKey)
+```
+
+## 実用的な使用例
+
+### バッチ処理での使用量記録
+
+```go
+func recordUsageBatch(usageData []UsageData) error {
+    ctx := context.Background()
+    
+    // 環境変数から認証
+    client, err := marketplace.ClientWithResponse(ctx)
+    if err != nil {
+        return fmt.Errorf("failed to create client: %w", err)
+    }
+
+    var records []clientapi.UsageRecord
+    for _, usage := range usageData {
+        records = append(records, clientapi.UsageRecord{
+            ProductId:          usage.ProductID,
+            CustomerIdentifier: usage.CustomerID,
+            Dimension: clientapi.Dimension{
+                Name:     usage.MetricName,
+                Quantity: usage.Quantity,
+            },
+            StartTime: usage.Timestamp,
+        })
+    }
+
+    response, err := client.CreateUsageRecordsWithResponse(ctx, records)
+    if err != nil {
+        return fmt.Errorf("API call failed: %w", err)
+    }
+
+    if response.StatusCode() != 200 && response.StatusCode() != 207 {
+        return fmt.Errorf("API returned error status: %d", response.StatusCode())
+    }
+
+    return nil
+}
+```
+
+### Webアプリケーションでの使用
+
+```go
+func usageHandler(w http.ResponseWriter, r *http.Request) {
+    // リクエストから使用量データを取得
+    var requestData struct {
+        ProductID  string  `json:"product_id"`
+        CustomerID string  `json:"customer_id"`
+        Metric     string  `json:"metric"`
+        Quantity   float64 `json:"quantity"`
+    }
+    
+    if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
+
+    // クライアント作成（環境変数から認証）
+    client, err := marketplace.ClientWithResponse(r.Context())
+    if err != nil {
+        http.Error(w, "Authentication failed", http.StatusUnauthorized)
+        return
+    }
+
+    // 使用量記録作成
+    records := []clientapi.UsageRecord{
+        {
+            ProductId:          requestData.ProductID,
+            CustomerIdentifier: requestData.CustomerID,
+            Dimension: clientapi.Dimension{
+                Name:     requestData.Metric,
+                Quantity: requestData.Quantity,
+            },
+            StartTime: time.Now(),
+        },
+    }
+
+    response, err := client.CreateUsageRecordsWithResponse(r.Context(), records)
+    if err != nil {
+        http.Error(w, "API call failed", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success": response.StatusCode() == 200,
+        "status":  response.StatusCode(),
+    })
+}
+```
+
+### シンプルな使用例
+
+```go
+func createUsageRecord() error {
+    ctx := context.Background()
+    
+    // 1行でクライアント取得
+    client, err := marketplace.ClientWithResponse(ctx)
+    if err != nil {
+        return err
+    }
+
+    // レコード作成とAPI呼び出し
+    records := []clientapi.UsageRecord{
+        {
+            ProductId:          "my-product",
+            CustomerIdentifier: "customer-123",
+            Dimension: clientapi.Dimension{
+                Name:     "api-calls",
+                Quantity: 1,
+            },
+            StartTime: time.Now(),
+        },
+    }
+
+    response, err := client.CreateUsageRecordsWithResponse(ctx, records)
+    if err != nil {
+        return err
+    }
+
+    fmt.Printf("Status: %d\n", response.StatusCode())
+    return nil
+}
 ```
 
 ## 開発
@@ -357,19 +385,35 @@ go test -v ./...
 go build ./...
 ```
 
-## サンプルコード
+## トラブルシューティング
 
-完全なサンプルコードはREADME冒頭の「クイックスタート」セクションを参照してください。
+### 認証エラー
+
+```
+❌ Authentication error: invalid credentials
+```
+
+- `MARKETPLACE_CLIENT_ID`と`MARKETPLACE_API_KEY`の値を確認
+- 環境変数が正しく設定されているか確認
+
+### 400 Bad Request
+
+```
+❌ Bad request: invalid usage record format
+```
+
+- `ProductId`、`CustomerIdentifier`、`Dimension`が正しく設定されているか確認
+- `StartTime`が適切な形式か確認
+
+### 409 Conflict (Update時)
+
+```
+❌ Conflict: records not updatable
+```
+
+- レコードが更新可能な状態か確認
+- 同じレコードを重複して更新していないか確認
 
 ## ライセンス
 
 [ライセンス情報をここに記載]
-
-## 貢献
-
-プルリクエストやイシューの報告を歓迎します。
-
-## サポート
-
-- [OpenAPI仕様](./openapi.yaml)
-- [開発者向けドキュメント](./CLAUDE.md)

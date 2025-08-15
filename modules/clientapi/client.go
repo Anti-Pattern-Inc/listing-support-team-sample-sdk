@@ -4,52 +4,49 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/generated/clientapi"
+	"github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/middleware"
 )
 
 var (
 	server = "https://0zm201tv70.execute-api.ap-northeast-1.amazonaws.com/Prod"
 )
 
-// MarketplaceClient provides a simple interface for marketplace operations
-type MarketplaceClient struct {
-	Client *clientapi.ClientWithResponses
-	token  string
-}
+func withRequestEditorFns(ctx context.Context, c *clientapi.Client) error {
+	// Get clientID and apiKey from environment variables
+	clientID := os.Getenv("MARKETPLACE_CLIENT_ID")
+	apiKey := os.Getenv("MARKETPLACE_API_KEY")
 
-// NewMarketplaceClient creates a new MarketplaceClient with Bearer token authentication
-func NewMarketplaceClient(token string) (*MarketplaceClient, error) {
-	authFunc := func(ctx context.Context, req *http.Request) error {
-		req.Header.Set("Authorization", "Bearer "+token)
-		return nil
+	if clientID == "" || apiKey == "" {
+		return fmt.Errorf("environment variables MARKETPLACE_CLIENT_ID and MARKETPLACE_API_KEY are required")
 	}
 
-	client, err := clientapi.NewClientWithResponses(server, func(c *clientapi.Client) error {
-		c.RequestEditors = []clientapi.RequestEditorFn{authFunc}
-		return nil
+	// Authenticate to get token
+	token, err := middleware.Authenticate(ctx, clientID, apiKey)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	c.RequestEditors = []clientapi.RequestEditorFn{
+		func(ctx context.Context, req *http.Request) error {
+			req.Header.Set("Authorization", "Bearer "+token)
+			return nil
+		},
+	}
+
+	return nil
+}
+
+// ClientWithResponse returns a ClientWithResponses with RequestEditorFn that generates authentication.
+func ClientWithResponse(ctx context.Context) (*clientapi.ClientWithResponses, error) {
+	clientWithResponse, err := clientapi.NewClientWithResponses(server, func(c *clientapi.Client) error {
+		return withRequestEditorFns(ctx, c)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create marketplace client: %w", err)
+		return nil, err
 	}
 
-	return &MarketplaceClient{
-		Client: client,
-		token:  token,
-	}, nil
-}
-
-// NewMarketplaceClientWithAuth creates a client by performing authentication first
-func NewMarketplaceClientWithAuth(ctx context.Context, clientID, apiKey string) (*MarketplaceClient, error) {
-	authClient, err := NewAuthClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create auth client: %w", err)
-	}
-
-	token, err := authClient.GetAuthToken(ctx, clientID, apiKey)
-	if err != nil {
-		return nil, fmt.Errorf("authentication failed: %w", err)
-	}
-
-	return NewMarketplaceClient(token)
+	return clientWithResponse, nil
 }
