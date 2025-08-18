@@ -27,6 +27,13 @@ const (
 	UpdateRecordResultErrorCodeUPDATEFAILURE      UpdateRecordResultErrorCode = "UPDATE_FAILURE"
 )
 
+// Defines values for ListUsageRecordsParamsStatus.
+const (
+	All       ListUsageRecordsParamsStatus = "all"
+	Completed ListUsageRecordsParamsStatus = "completed"
+	Pending   ListUsageRecordsParamsStatus = "pending"
+)
+
 // ConflictResponse defines model for ConflictResponse.
 type ConflictResponse struct {
 	DuplicateRecords *float32        `json:"duplicateRecords,omitempty"`
@@ -194,6 +201,54 @@ type UsageRecord struct {
 	StartTime time.Time `json:"start_time"`
 }
 
+// UsageRecordResponse defines model for UsageRecordResponse.
+type UsageRecordResponse struct {
+	// CreateTimestamp レコード作成タイムスタンプ（UNIXタイムスタンプ）
+	CreateTimestamp float32 `json:"create_timestamp"`
+
+	// CustomerIdentifier 顧客識別子
+	CustomerIdentifier string `json:"customerIdentifier"`
+
+	// DimensionUsage ディメンション使用量データ
+	DimensionUsage *[]struct {
+		// Dimension ディメンション名
+		Dimension *string `json:"dimension,omitempty"`
+
+		// UsageAllocations 使用量アロケーション（オプション）
+		UsageAllocations *[]struct {
+			// AllocatedUsageQuantity 割り当て使用量
+			AllocatedUsageQuantity *float32 `json:"allocated_usage_quantity,omitempty"`
+
+			// Tags アロケーションタグ
+			Tags *[]struct {
+				// Key タグキー
+				Key *string `json:"key,omitempty"`
+
+				// Value タグ値
+				Value *string `json:"value,omitempty"`
+			} `json:"tags,omitempty"`
+		} `json:"usage_allocations,omitempty"`
+
+		// Value 使用量値
+		Value *float32 `json:"value,omitempty"`
+	} `json:"dimension_usage,omitempty"`
+
+	// MeteringPending メータリング待ちフラグ
+	MeteringPending bool `json:"metering_pending"`
+
+	// MeteringResponse メータリングAPIレスポンス（処理済みの場合）
+	MeteringResponse *string `json:"metering_response,omitempty"`
+
+	// MeteringResult メータリング結果（処理済みの場合）
+	MeteringResult *string `json:"metering_result,omitempty"`
+
+	// MeteringTimestamp メータリング処理タイムスタンプ（処理済みの場合）
+	MeteringTimestamp *float32 `json:"metering_timestamp,omitempty"`
+
+	// ProductId AWS Marketplace製品ID
+	ProductId string `json:"product_id"`
+}
+
 // IssueAuthTokenJSONBody defines parameters for IssueAuthToken.
 type IssueAuthTokenJSONBody struct {
 	// ApiKey API キー（DynamoDBのapi_key）
@@ -202,6 +257,34 @@ type IssueAuthTokenJSONBody struct {
 	// ClientId クライアントID（DynamoDBのcustomer_id）
 	ClientId string `json:"client_id"`
 }
+
+// ListUsageRecordsParams defines parameters for ListUsageRecords.
+type ListUsageRecordsParams struct {
+	// ProductId 製品IDでフィルタリング
+	ProductId *string `form:"product_id,omitempty" json:"product_id,omitempty"`
+
+	// StartTimestamp 開始タイムスタンプ（UNIXタイムスタンプ）。
+	// end_timestampが指定されていない場合は、このタイムスタンプの特定レコードを取得します。
+	StartTimestamp *string `form:"start_timestamp,omitempty" json:"start_timestamp,omitempty"`
+
+	// EndTimestamp 終了タイムスタンプ（UNIXタイムスタンプ）
+	EndTimestamp *string `form:"end_timestamp,omitempty" json:"end_timestamp,omitempty"`
+
+	// Limit 取得するレコード数の上限（最大100）
+	Limit *string `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// NextToken ページネーション用のトークン（前回レスポンスのnextTokenを指定）
+	NextToken *string `form:"next_token,omitempty" json:"next_token,omitempty"`
+
+	// Status メータリングステータスでフィルタリング
+	// - pending: メータリング待ちレコードのみ
+	// - completed: メータリング完了レコードのみ
+	// - all: 全レコード（デフォルト）
+	Status *ListUsageRecordsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListUsageRecordsParamsStatus defines parameters for ListUsageRecords.
+type ListUsageRecordsParamsStatus string
 
 // CreateUsageRecordsJSONBody defines parameters for CreateUsageRecords.
 type CreateUsageRecordsJSONBody = []UsageRecord

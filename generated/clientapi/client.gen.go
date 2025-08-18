@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
@@ -95,6 +97,9 @@ type ClientInterface interface {
 
 	IssueAuthToken(ctx context.Context, body IssueAuthTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListUsageRecords request
+	ListUsageRecords(ctx context.Context, params *ListUsageRecordsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// OptionsV1UsageRecords request
 	OptionsV1UsageRecords(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -135,6 +140,18 @@ func (c *Client) IssueAuthTokenWithBody(ctx context.Context, contentType string,
 
 func (c *Client) IssueAuthToken(ctx context.Context, body IssueAuthTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIssueAuthTokenRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListUsageRecords(ctx context.Context, params *ListUsageRecordsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListUsageRecordsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -268,6 +285,135 @@ func NewIssueAuthTokenRequestWithBody(server string, contentType string, body io
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListUsageRecordsRequest generates requests for ListUsageRecords
+func NewListUsageRecordsRequest(server string, params *ListUsageRecordsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/usage-records")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ProductId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "product_id", runtime.ParamLocationQuery, *params.ProductId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.StartTimestamp != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "start_timestamp", runtime.ParamLocationQuery, *params.StartTimestamp); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.EndTimestamp != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "end_timestamp", runtime.ParamLocationQuery, *params.EndTimestamp); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.NextToken != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "next_token", runtime.ParamLocationQuery, *params.NextToken); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -430,6 +576,9 @@ type ClientWithResponsesInterface interface {
 
 	IssueAuthTokenWithResponse(ctx context.Context, body IssueAuthTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*IssueAuthTokenResponse, error)
 
+	// ListUsageRecordsWithResponse request
+	ListUsageRecordsWithResponse(ctx context.Context, params *ListUsageRecordsParams, reqEditors ...RequestEditorFn) (*ListUsageRecordsResponse, error)
+
 	// OptionsV1UsageRecordsWithResponse request
 	OptionsV1UsageRecordsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsV1UsageRecordsResponse, error)
 
@@ -492,6 +641,48 @@ func (r IssueAuthTokenResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r IssueAuthTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListUsageRecordsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		// Count 返却されたレコード数
+		Count *float32 `json:"count,omitempty"`
+
+		// NextToken 次のページ取得用のトークン（ページネーション用）
+		NextToken *string              `json:"nextToken,omitempty"`
+		Record    *UsageRecordResponse `json:"record,omitempty"`
+
+		// Records レコード一覧取得時
+		Records *[]UsageRecordResponse `json:"records,omitempty"`
+
+		// RequestId リクエストID
+		RequestId *string `json:"requestId,omitempty"`
+
+		// TotalRecords フィルタリング前の総レコード数
+		TotalRecords *float32 `json:"totalRecords,omitempty"`
+	}
+	JSON400 *ErrorResponse
+	JSON401 *ErrorResponse
+	JSON404 *ErrorResponse
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ListUsageRecordsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListUsageRecordsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -599,6 +790,15 @@ func (c *ClientWithResponses) IssueAuthTokenWithResponse(ctx context.Context, bo
 	return ParseIssueAuthTokenResponse(rsp)
 }
 
+// ListUsageRecordsWithResponse request returning *ListUsageRecordsResponse
+func (c *ClientWithResponses) ListUsageRecordsWithResponse(ctx context.Context, params *ListUsageRecordsParams, reqEditors ...RequestEditorFn) (*ListUsageRecordsResponse, error) {
+	rsp, err := c.ListUsageRecords(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListUsageRecordsResponse(rsp)
+}
+
 // OptionsV1UsageRecordsWithResponse request returning *OptionsV1UsageRecordsResponse
 func (c *ClientWithResponses) OptionsV1UsageRecordsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsV1UsageRecordsResponse, error) {
 	rsp, err := c.OptionsV1UsageRecords(ctx, reqEditors...)
@@ -694,6 +894,76 @@ func ParseIssueAuthTokenResponse(rsp *http.Response) (*IssueAuthTokenResponse, e
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListUsageRecordsResponse parses an HTTP response from a ListUsageRecordsWithResponse call
+func ParseListUsageRecordsResponse(rsp *http.Response) (*ListUsageRecordsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListUsageRecordsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Count 返却されたレコード数
+			Count *float32 `json:"count,omitempty"`
+
+			// NextToken 次のページ取得用のトークン（ページネーション用）
+			NextToken *string              `json:"nextToken,omitempty"`
+			Record    *UsageRecordResponse `json:"record,omitempty"`
+
+			// Records レコード一覧取得時
+			Records *[]UsageRecordResponse `json:"records,omitempty"`
+
+			// RequestId リクエストID
+			RequestId *string `json:"requestId,omitempty"`
+
+			// TotalRecords フィルタリング前の総レコード数
+			TotalRecords *float32 `json:"totalRecords,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ErrorResponse

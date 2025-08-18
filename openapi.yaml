@@ -127,6 +127,186 @@ paths:
                 example: "Content-Type,Authorization"
 
   /v1/usage-records:
+    get:
+      summary: 使用量レコードリスト取得
+      description: |
+        AWS Marketplace SaaS製品の使用量レコードをDynamoDBから取得します。
+        認証済み顧客のレコードのみを返し、タイムスタンプ範囲やメータリングステータスでのフィルタリングが可能です。
+      operationId: listUsageRecords
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: product_id
+          in: query
+          description: 製品IDでフィルタリング
+          required: false
+          schema:
+            type: string
+            pattern: '^[a-zA-Z0-9-_]+$'
+            example: "test-product"
+        - name: start_timestamp
+          in: query
+          description: |
+            開始タイムスタンプ（UNIXタイムスタンプ）。
+            end_timestampが指定されていない場合は、このタイムスタンプの特定レコードを取得します。
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+            example: "1722502800000"
+        - name: end_timestamp
+          in: query
+          description: 終了タイムスタンプ（UNIXタイムスタンプ）
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+            example: "1722589200000"
+        - name: limit
+          in: query
+          description: 取得するレコード数の上限（最大100）
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+            default: "50"
+            example: "50"
+        - name: next_token
+          in: query
+          description: ページネーション用のトークン（前回レスポンスのnextTokenを指定）
+          required: false
+          schema:
+            type: string
+            example: "eyJjdXN0b21lcklkZW50aWZpZXIiOnsiUyI6InRlc3QtY3VzdG9tZXItMDAxIn0sImNyZWF0ZV90aW1lc3RhbXAiOnsiTiI6IjE3MjI1MDI4MDAwMDAifX0="
+        - name: status
+          in: query
+          description: |
+            メータリングステータスでフィルタリング
+            - pending: メータリング待ちレコードのみ
+            - completed: メータリング完了レコードのみ
+            - all: 全レコード（デフォルト）
+          required: false
+          schema:
+            type: string
+            enum: [pending, completed, all]
+            default: "all"
+            example: "all"
+      responses:
+        '200':
+          description: レコード取得成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  record:
+                    $ref: '#/components/schemas/UsageRecordResponse'
+                    description: 特定レコード取得時（start_timestampのみ指定）
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UsageRecordResponse'
+                    description: レコード一覧取得時
+                  count:
+                    type: number
+                    description: 返却されたレコード数
+                    example: 5
+                  totalRecords:
+                    type: number
+                    description: フィルタリング前の総レコード数
+                    example: 10
+                  nextToken:
+                    type: string
+                    description: 次のページ取得用のトークン（ページネーション用）
+                    example: "eyJjdXN0b21lcklkZW50aWZpZXIiOnsiUyI6InRlc3QtY3VzdG9tZXItMDAxIn0sImNyZWF0ZV90aW1lc3RhbXAiOnsiTiI6IjE3MjI1MDI4MDAwMDAifX0="
+                  requestId:
+                    type: string
+                    description: リクエストID
+                    example: "12345678-1234-1234-1234-123456789012"
+              examples:
+                single_record:
+                  summary: 特定レコード取得
+                  value:
+                    record:
+                      customerIdentifier: "test-customer-001"
+                      create_timestamp: 1722502800000
+                      product_id: "test-product"
+                      metering_pending: true
+                      dimension_usage:
+                        - dimension: "requests"
+                          value: 10
+                          usage_allocations:
+                            - allocated_usage_quantity: 5
+                              tags:
+                                - key: "team"
+                                  value: "engineering"
+                    requestId: "12345678-1234-1234-1234-123456789012"
+                multiple_records:
+                  summary: レコード一覧取得
+                  value:
+                    records:
+                      - customerIdentifier: "test-customer-001"
+                        create_timestamp: 1722502800000
+                        product_id: "test-product"
+                        metering_pending: true
+                        dimension_usage:
+                          - dimension: "requests"
+                            value: 10
+                      - customerIdentifier: "test-customer-001"
+                        create_timestamp: 1722506400000
+                        product_id: "test-product"
+                        metering_pending: false
+                        dimension_usage:
+                          - dimension: "storage"
+                            value: 100
+                        metering_result: "SUCCESS"
+                        metering_timestamp: 1722507000000
+                    count: 2
+                    totalRecords: 2
+                    nextToken: null
+                    requestId: "12345678-1234-1234-1234-123456789012"
+        '400':
+          description: リクエストパラメータエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_limit:
+                  summary: 制限値エラー
+                  value:
+                    error: "Limit cannot exceed 100"
+                    requestId: "12345678-1234-1234-1234-123456789012"
+                validation_error:
+                  summary: バリデーションエラー
+                  value:
+                    error: "Validation failed: limit: should match pattern"
+                    requestId: "12345678-1234-1234-1234-123456789012"
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: レコードが見つからない（特定レコード取得時）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                record_not_found:
+                  summary: レコード未存在
+                  value:
+                    error: "Usage record not found"
+                    requestId: "12345678-1234-1234-1234-123456789012"
+        '500':
+          description: 内部サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     post:
       summary: 新規使用量レコード作成
       description: |
@@ -583,6 +763,81 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UpdateRecordResult'
+
+    UsageRecordResponse:
+      type: object
+      properties:
+        customerIdentifier:
+          type: string
+          description: 顧客識別子
+          example: "test-customer-001"
+        create_timestamp:
+          type: number
+          description: レコード作成タイムスタンプ（UNIXタイムスタンプ）
+          example: 1722502800000
+        product_id:
+          type: string
+          description: AWS Marketplace製品ID
+          example: "test-product"
+        metering_pending:
+          type: boolean
+          description: メータリング待ちフラグ
+          example: true
+        dimension_usage:
+          type: array
+          description: ディメンション使用量データ
+          items:
+            type: object
+            properties:
+              dimension:
+                type: string
+                description: ディメンション名
+                example: "requests"
+              value:
+                type: number
+                description: 使用量値
+                example: 10
+              usage_allocations:
+                type: array
+                description: 使用量アロケーション（オプション）
+                items:
+                  type: object
+                  properties:
+                    allocated_usage_quantity:
+                      type: number
+                      description: 割り当て使用量
+                      example: 5
+                    tags:
+                      type: array
+                      description: アロケーションタグ
+                      items:
+                        type: object
+                        properties:
+                          key:
+                            type: string
+                            description: タグキー
+                            example: "team"
+                          value:
+                            type: string
+                            description: タグ値
+                            example: "engineering"
+        metering_result:
+          type: string
+          description: メータリング結果（処理済みの場合）
+          example: "SUCCESS"
+        metering_timestamp:
+          type: number
+          description: メータリング処理タイムスタンプ（処理済みの場合）
+          example: 1722507000000
+        metering_response:
+          type: string
+          description: メータリングAPIレスポンス（処理済みの場合）
+          example: "{\"meteringRecordId\":\"12345\"}"
+      required:
+        - customerIdentifier
+        - create_timestamp
+        - product_id
+        - metering_pending
 
     ErrorResponse:
       type: object

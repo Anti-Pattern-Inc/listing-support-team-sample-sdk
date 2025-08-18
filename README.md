@@ -104,8 +104,43 @@ SaaSus SDKスタイルでクライアント取得後、直接APIを呼び出せ�
 
 - `client.CreateUsageRecordsWithResponse(ctx, records)`: 使用量記録作成
 - `client.UpdateUsageRecordsWithResponse(ctx, records)`: 使用量記録更新
+- `client.GetUsageRecordsWithResponse(ctx, params)`: 使用量記録取得
 - `client.OptionsUsageRecordsWithResponse(ctx)`: CORS対応
 - `client.IssueAuthTokenWithResponse(ctx, request)`: 認証トークン取得
+
+### 使用量レコード取得
+
+```go
+func getUsageRecords() error {
+    ctx := context.Background()
+    
+    // 環境変数から自動認証
+    client, err := marketplace.ClientWithResponse(ctx)
+    if err != nil {
+        return err
+    }
+
+    // 期間指定で取得（過去24時間）
+    now := time.Now()
+    yesterday := now.AddDate(0, 0, -1)
+    
+    allStatus := clientapi.All
+    params := &clientapi.GetUsageRecordsParams{
+        ProductId:      stringPtr("my-product-id"),
+        StartTimestamp: stringPtr(fmt.Sprintf("%d", yesterday.Unix())),
+        EndTimestamp:   stringPtr(fmt.Sprintf("%d", now.Unix())),
+        Limit:          stringPtr("10"),
+        Status:         &allStatus,
+    }
+
+    response, err := client.GetUsageRecordsWithResponse(ctx, params)
+    if err != nil {
+        return err
+    }
+}
+
+func stringPtr(s string) *string { return &s }
+```
 
 ## 使用量レコードの構造
 
