@@ -8,9 +8,15 @@ import (
 
 	"github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/generated/clientapi"
 	marketplace "github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/modules/clientapi"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found or error loading .env file")
+	}
+
 	ctx := context.Background()
 
 	// Create client from environment variables (CLIENT_ID and API_KEY)
