@@ -10,17 +10,18 @@ import (
 	"github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/middleware"
 )
 
-var (
-	server = "https://0zm201tv70.execute-api.ap-northeast-1.amazonaws.com/Prod"
-)
+// getServerURL returns the API server URL from environment variable
+func getServerURL() string {
+	return os.Getenv("API_URL")
+}
 
 func withRequestEditorFns(ctx context.Context, c *clientapi.Client) error {
 	// Get clientID and apiKey from environment variables
-	clientID := os.Getenv("MARKETPLACE_CLIENT_ID")
-	apiKey := os.Getenv("MARKETPLACE_API_KEY")
+	clientID := os.Getenv("CLIENT_ID")
+	apiKey := os.Getenv("API_KEY")
 
 	if clientID == "" || apiKey == "" {
-		return fmt.Errorf("environment variables MARKETPLACE_CLIENT_ID and MARKETPLACE_API_KEY are required")
+		return fmt.Errorf("environment variables CLIENT_ID and API_KEY are required")
 	}
 
 	// Authenticate to get token
@@ -41,7 +42,12 @@ func withRequestEditorFns(ctx context.Context, c *clientapi.Client) error {
 
 // ClientWithResponse returns a ClientWithResponses with RequestEditorFn that generates authentication.
 func ClientWithResponse(ctx context.Context) (*clientapi.ClientWithResponses, error) {
-	clientWithResponse, err := clientapi.NewClientWithResponses(server, func(c *clientapi.Client) error {
+	serverURL := getServerURL()
+	if serverURL == "" {
+		return nil, fmt.Errorf("API_URL environment variable is required")
+	}
+
+	clientWithResponse, err := clientapi.NewClientWithResponses(serverURL, func(c *clientapi.Client) error {
 		return withRequestEditorFns(ctx, c)
 	})
 	if err != nil {

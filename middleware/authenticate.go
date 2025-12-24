@@ -8,9 +8,10 @@ import (
 	"github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk/generated/clientapi"
 )
 
-var (
-	server = "https://0zm201tv70.execute-api.ap-northeast-1.amazonaws.com/Prod"
-)
+// getServerURL returns the API server URL from environment variable
+func getServerURL() string {
+	return os.Getenv("API_URL")
+}
 
 // AuthClient provides authentication functionality
 type AuthClient struct {
@@ -19,7 +20,12 @@ type AuthClient struct {
 
 // NewAuthClient creates a new AuthClient instance
 func NewAuthClient() (*AuthClient, error) {
-	client, err := clientapi.NewClientWithResponses(server)
+	serverURL := getServerURL()
+	if serverURL == "" {
+		return nil, fmt.Errorf("API_URL environment variable is required")
+	}
+
+	client, err := clientapi.NewClientWithResponses(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create auth client: %w", err)
 	}
@@ -66,21 +72,20 @@ func (a *AuthClient) handleAuthResponse(response *clientapi.IssueAuthTokenRespon
 func Authenticate(ctx context.Context, clientID, apiKey string) (string, error) {
 	// If clientID or apiKey is empty, try to get from environment variables
 	if clientID == "" {
-		clientID = os.Getenv("MARKETPLACE_CLIENT_ID")
+		clientID = os.Getenv("CLIENT_ID")
 	}
 	if apiKey == "" {
-		apiKey = os.Getenv("MARKETPLACE_API_KEY")
+		apiKey = os.Getenv("API_KEY")
 	}
 
 	if clientID == "" || apiKey == "" {
-		return "", fmt.Errorf("clientID and apiKey are required (either as parameters or environment variables MARKETPLACE_CLIENT_ID and MARKETPLACE_API_KEY)")
+		return "", fmt.Errorf("clientID and apiKey are required (either as parameters or environment variables CLIENT_ID and API_KEY)")
 	}
 
 	authClient, err := NewAuthClient()
 	if err != nil {
 		return "", err
 	}
-	
+
 	return authClient.GetAuthToken(ctx, clientID, apiKey)
 }
-

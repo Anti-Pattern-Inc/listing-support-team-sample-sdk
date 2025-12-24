@@ -21,8 +21,9 @@ go get github.com/Anti-Pattern-Inc/listing-support-team-sample-sdk
 ### 環境変数設定
 
 ```bash
-export MARKETPLACE_CLIENT_ID="your_client_id"
-export MARKETPLACE_API_KEY="your_api_key"
+export CLIENT_ID="your_client_id"
+export API_KEY="your_api_key"
+export API_URL="https://your-api-gateway-url.com/Prod"
 ```
 
 ### 基本的な使用方法
@@ -94,7 +95,7 @@ func main() {
 ### クライアント作成
 
 ```go
-// 環境変数 MARKETPLACE_CLIENT_ID と MARKETPLACE_API_KEY から自動認証
+// 環境変数 CLIENT_ID と API_KEY から自動認証
 client, err := marketplace.ClientWithResponse(ctx)
 ```
 
@@ -428,7 +429,7 @@ go build ./...
 ❌ Authentication error: invalid credentials
 ```
 
-- `MARKETPLACE_CLIENT_ID`と`MARKETPLACE_API_KEY`の値を確認
+- `CLIENT_ID`と`API_KEY`の値を確認
 - 環境変数が正しく設定されているか確認
 
 ### 400 Bad Request
